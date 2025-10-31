@@ -1,0 +1,16 @@
+{
+  "name": "mind-membrane",
+  "private": true,
+  "version": "0.1.0",
+  "type": "commonjs",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run -w packages/l4 build && npm run -w packages/audit-u4 build && npm run -w packages/tools-terminal build && npm run -w packages/tools-citizens build && npm run -w apps/server build",
+    "start": "npm run -w apps/server start",
+    "lint": "npm run -w apps/server lint",
+    "test": "echo \"No tests configured\""
+  }
+}

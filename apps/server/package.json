@@ -1,0 +1,31 @@
+{
+  "name": "@mind-membrane/server",
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "ts-node-dev --respawn src/index.ts",
+    "lint": "eslint src --max-warnings=0"
+  },
+  "dependencies": {
+    "@mind-membrane/audit-u4": "^0.1.0",
+    "@mind-membrane/l4": "^0.1.0",
+    "@mind-membrane/tools-citizens": "^0.1.0",
+    "@mind-membrane/tools-terminal": "^0.1.0",
+    "body-parser": "^1.20.3",
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "@types/body-parser": "^1.19.5",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.12.7",
+    "@typescript-eslint/eslint-plugin": "^7.9.0",
+    "@typescript-eslint/parser": "^7.9.0",
+    "eslint": "^8.57.0",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.4.5"
+  }
+}
