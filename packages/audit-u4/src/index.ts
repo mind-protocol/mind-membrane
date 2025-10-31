@@ -1,7 +1,10 @@
-import { randomBytes } from "crypto";
+import { randomBytes, createHash as createSha512 } from "crypto";
 import { createHash } from "blake3";
 import { EventEmitter } from "events";
 import * as ed from "@noble/ed25519";
+
+// Configure @noble/ed25519 with Node.js crypto sha512
+ed.etc.sha512Sync = (...m) => createSha512("sha512").update(Buffer.concat(m)).digest();
 
 export interface AuditEvent<TPayload = unknown> {
   id: string;
@@ -39,12 +42,12 @@ export class AuditTrail extends EventEmitter {
     return Buffer.from(this.publicKey).toString("base64");
   }
 
-  recordEvent<TPayload>(type: string, payload: TPayload): AuditEvent<TPayload> {
+  async recordEvent<TPayload>(type: string, payload: TPayload): Promise<AuditEvent<TPayload>> {
     const timestamp = new Date().toISOString();
     const serialized = JSON.stringify({ type, timestamp, payload, prevHash: this.lastHash });
     const hashBytes = digestBlake3(serialized);
     const hash = Buffer.from(hashBytes).toString("base64");
-    const signatureBytes = ed.signSync(hashBytes, this.privateKey);
+    const signatureBytes = await ed.signAsync(hashBytes, this.privateKey);
     const signature = Buffer.from(signatureBytes).toString("base64");
     const idBytes = digestBlake3(`${serialized}:${Math.random()}`);
     const event: AuditEvent<TPayload> = {

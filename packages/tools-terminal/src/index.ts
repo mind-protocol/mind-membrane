@@ -28,6 +28,7 @@ export type TerminalToolResponse =
       mode: "execute";
       evaluation: PolicyEvaluation;
       emitter: EventEmitter;
+      pty: any; // IPty instance for backpressure control (pause/resume)
     };
 
 export function createTerminalTool(context: TerminalToolContext) {
@@ -76,13 +77,23 @@ export function createTerminalTool(context: TerminalToolContext) {
       const emitter = new EventEmitter();
       const audit = context.auditTrail;
       let timeout: NodeJS.Timeout | undefined;
+      let proc: any = null; // PTY instance, declared outside try for return
+
       try {
-        const proc = pty.spawn(args.bin, args.args, {
-          name: "xterm-color",
+        // Ensure proper TTY environment for commands that check terminal capabilities
+        const ptyEnv = {
+          ...process.env,
+          TERM: "xterm-256color",
+          LANG: "C.UTF-8",
+          LC_ALL: "C.UTF-8"
+        };
+
+        proc = pty.spawn(args.bin, args.args, {
+          name: "xterm-256color",
           cols: 120,
           rows: 30,
           cwd: args.cwd,
-          env: process.env,
+          env: ptyEnv,
           encoding: "utf8"
         });
         audit.recordEvent("terminal.execute.started", { args });
@@ -95,11 +106,11 @@ export function createTerminalTool(context: TerminalToolContext) {
             // ignore
           }
         }, args.timeout_ms);
-        proc.onData((data) => {
+        proc.onData((data: string) => {
           emitter.emit("event", { type: "stdout", data });
           audit.recordEvent("terminal.execute.stdout", { length: data.length });
         });
-        proc.onExit(({ exitCode }) => {
+        proc.onExit(({ exitCode }: { exitCode: number }) => {
           if (timeout) {
             clearTimeout(timeout);
           }
@@ -113,8 +124,9 @@ export function createTerminalTool(context: TerminalToolContext) {
         const message = error instanceof Error ? error.message : String(error);
         emitter.emit("event", { type: "error", data: message });
         context.auditTrail.recordEvent("terminal.execute.error", { message });
+        return { mode: "execute", evaluation, emitter, pty: null };
       }
-      return { mode: "execute", evaluation, emitter };
+      return { mode: "execute", evaluation, emitter, pty: proc };
     }
   };
 }

@@ -4,6 +4,8 @@ import express, { Response } from "express";
 import { AuditTrail, AuditEvent } from "@mind-membrane/audit-u4";
 import { createCitizenTool } from "@mind-membrane/tools-citizens";
 import { createTerminalTool } from "@mind-membrane/tools-terminal";
+import { openSSE } from "./sse";
+import { terminalExecuteDirect } from "./handlers/terminal-execute";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const PROTOCOL_VERSION = "2025-06-18";
@@ -137,6 +139,13 @@ async function handleToolsCall(request: JsonRpcRequest, res: Response) {
   const params = request.params ?? {};
   const name = params.name;
   const args = params.arguments;
+
+  // HOTFIX: Route terminal.run execute mode to direct PTY handler
+  // This bypasses EventEmitter abstraction to eliminate scope/timing issues
+  if (name === "terminal.run" && args?.mode === "execute" && args?.approved === true) {
+    return terminalExecuteDirect(args, res);
+  }
+
   const tool = toolsRegistry.find((item) => item.name === name);
   if (!tool) {
     const response: JsonRpcResponse = {
@@ -179,26 +188,49 @@ async function handleToolsCall(request: JsonRpcRequest, res: Response) {
     };
     return sendJsonRpc(res, response);
   }
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-store");
-  res.setHeader("Connection", "keep-alive");
-  res.flushHeaders();
+
+  // Open robust SSE channel with anti-buffering
+  const sse = openSSE(res);
   const emitter = result.emitter;
-  let closed = false;
-  const sendEvent = (data: unknown) => {
-    if (!closed) {
-      res.write(`data: ${JSON.stringify(data)}\n\n`);
-    }
-  };
+  const ptyInstance = (result as any).pty; // PTY instance for backpressure control
+
+  // Send initial "started" event for immediate feedback
+  sse.send("started", {
+    jsonrpc: "2.0",
+    method: "tools/call/started",
+    params: { id: request.id, timestamp: Date.now() }
+  });
+
+  // Backpressure: pause PTY when socket buffer is full, resume on drain
+  let paused = false;
+  if (ptyInstance) {
+    res.on("drain", () => {
+      if (paused && ptyInstance) {
+        ptyInstance.resume();
+        paused = false;
+      }
+    });
+  }
+
   const cleanup = () => {
-    if (!closed) {
-      closed = true;
-      emitter.removeListener("event", onEvent);
-      res.end();
-    }
+    emitter.removeListener("event", onEvent);
+    sse.close();
   };
+
   const onEvent = (event: any) => {
-    sendEvent({ jsonrpc: "2.0", method: "tools/call/stream", params: { event } });
+    // Stream the event with backpressure handling
+    const ok = sse.send("stream", {
+      jsonrpc: "2.0",
+      method: "tools/call/stream",
+      params: { event }
+    });
+
+    // If buffer is full, pause PTY until drain
+    if (!ok && !paused && ptyInstance) {
+      ptyInstance.pause();
+      paused = true;
+    }
+
     if (event?.type === "exit") {
       const finalResponse: JsonRpcResponse = {
         jsonrpc: "2.0",
@@ -213,9 +245,10 @@ async function handleToolsCall(request: JsonRpcRequest, res: Response) {
           policy: result.evaluation
         }
       };
-      sendEvent(finalResponse);
+      sse.send("result", finalResponse);
       cleanup();
     }
+
     if (event?.type === "error") {
       const finalResponse: JsonRpcResponse = {
         jsonrpc: "2.0",
@@ -230,15 +263,13 @@ async function handleToolsCall(request: JsonRpcRequest, res: Response) {
           policy: result.evaluation
         }
       };
-      sendEvent(finalResponse);
+      sse.send("result", finalResponse);
       cleanup();
     }
   };
+
   emitter.on("event", onEvent);
-  res.on("close", () => {
-    emitter.removeListener("event", onEvent);
-    closed = true;
-  });
+  res.on("close", cleanup);
 }
 
 const handlers: Record<string, (request: JsonRpcRequest, res: Response) => void | Promise<void>> = {

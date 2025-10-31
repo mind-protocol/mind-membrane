@@ -6,24 +6,88 @@ export type PolicyEvaluation = {
   reasons: string[];
 };
 
+// Linux-native binary allowlist (L4 policy v1/strict)
 const BINARY_ALLOWLIST = new Set([
+  "bash",
+  "sh",
   "git",
-  "powershell",
-  "pwsh",
-  "cmd",
   "node",
   "npm",
-  "wsl.exe",
-  "bash",
-  "sh"
+  "python",
+  "python3",
+  "ls",
+  "cat",
+  "echo",
+  "pwd",
+  "cd",
+  "mkdir",
+  "rm",
+  "cp",
+  "mv",
+  "touch",
+  "grep",
+  "find",
+  "sed",
+  "awk",
+  "curl",
+  "wget",
+  "tar",
+  "gzip",
+  "unzip",
+  "docker",
+  "kubectl",
+  "terraform",
+  "ansible",
+  "systemctl",
+  "journalctl",
+  "ps",
+  "top",
+  "htop",
+  "df",
+  "du",
+  "free",
+  "uname",
+  "hostname",
+  "whoami",
+  "which",
+  "env",
+  "export",
+  "source",
+  "make",
+  "gcc",
+  "g++",
+  "cargo",
+  "rustc",
+  "go",
+  "java",
+  "javac",
+  "mvn",
+  "gradle",
+  "pip",
+  "pip3",
+  "virtualenv",
+  "poetry",
+  "composer",
+  "ruby",
+  "gem",
+  "bundle",
+  "rails",
+  "dotnet",
+  "mono",
+  "claude"
 ]);
 
+// Linux/Unix path allowlist (L4 policy v1/strict)
 const CWD_ALLOWLIST = [
-  /^C:\\[\\\\A-Za-z0-9_. -]+$/i,
-  /^D:\\[\\\\A-Za-z0-9_. -]+$/i,
-  /^\/workspace\//,
-  /^\/[A-Za-z0-9_.-]+/,
-  /^\.\/?[A-Za-z0-9_.\/-]+$/
+  /^\/home\/[a-z0-9_-]+/i,           // /home/username or /home/username/*
+  /^\/workspace(\/|$)/,              // /workspace or /workspace/*
+  /^\/tmp(\/|$)/,                    // /tmp or /tmp/*
+  /^\/var\/tmp(\/|$)/,               // /var/tmp or /var/tmp/*
+  /^\/opt(\/|$)/,                    // /opt or /opt/*
+  /^\/usr\/local(\/|$)/,             // /usr/local or /usr/local/*
+  /^\/srv(\/|$)/,                    // /srv or /srv/*
+  /^\.\/?[A-Za-z0-9_.\/-]+$/,        // relative paths like ./foo or foo/bar
+  /^~\/[A-Za-z0-9_.\/-]+$/           // ~/foo (tilde expansion)
 ];
 
 const SHELL_META_CHARS = /[;&|`]/;
@@ -43,16 +107,14 @@ export type TerminalRunArguments = z.infer<typeof terminalRunSchema>;
 export const citizenCallSchema = z.object({
   citizen: z.string().min(1),
   message: z.string().min(1),
-  distro: z.string().default("Ubuntu"),
-  workdir: z.string().default("~/mindprotocol/consciousness/citizens"),
+  workdir: z.string().optional(), // If not provided, use MCP_CITIZEN_WORKDIR env
   continue: z.boolean().default(true),
   policy_id: z.string().default("policy://citizen/v1/strict")
 });
 
 export type CitizenCallArguments = z.infer<typeof citizenCallSchema>;
 
-const CITIZEN_NAME_REGEX = /^[a-z0-9-]+$/i;
-const DISTRO_ALLOWLIST = new Set(["Ubuntu", "Debian", "Alpine", "MindOS"]);
+const CITIZEN_NAME_REGEX = /^[a-z0-9_-]+$/i;
 
 export function evaluateTerminalPolicy(args: TerminalRunArguments): PolicyEvaluation {
   const reasons: string[] = [];
@@ -84,11 +146,15 @@ export function evaluateCitizenPolicy(args: CitizenCallArguments): PolicyEvaluat
   if (!CITIZEN_NAME_REGEX.test(args.citizen)) {
     reasons.push("Citizen name contains invalid characters");
   }
-  if (!DISTRO_ALLOWLIST.has(args.distro)) {
-    reasons.push(`Distribution ${args.distro} is not in allowlist`);
-  }
   if (SHELL_META_CHARS.test(args.message)) {
     reasons.push("Message contains disallowed shell metacharacters");
+  }
+  // Validate workdir if provided
+  if (args.workdir) {
+    const allowed = CWD_ALLOWLIST.some((pattern) => pattern.test(args.workdir ?? ""));
+    if (!allowed) {
+      reasons.push(`Working directory ${args.workdir} is not allowed`);
+    }
   }
   return {
     policyId: args.policy_id,
