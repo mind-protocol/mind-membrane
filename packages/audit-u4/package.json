@@ -1,0 +1,16 @@
+{
+  "name": "@mind-membrane/audit-u4",
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@noble/ed25519": "^2.1.0",
+    "blake3": "^2.1.7"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}

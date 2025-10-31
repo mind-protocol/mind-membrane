@@ -1,0 +1,16 @@
+{
+  "name": "@mind-membrane/tools-citizens",
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@mind-membrane/audit-u4": "^0.1.0",
+    "@mind-membrane/l4": "^0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}
