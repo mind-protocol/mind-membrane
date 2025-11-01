@@ -8,7 +8,10 @@ import { openSSE } from "./sse";
 import { terminalExecuteDirect } from "./handlers/terminal-execute";
 
 const PORT = Number(process.env.PORT ?? 8787);
-const PROTOCOL_VERSION = "2025-06-18";
+// The current MCP protocol version supported by ChatGPT connectors.
+// Using an unknown future version causes ChatGPT to refuse the connection,
+// so we align with the latest published spec.
+const PROTOCOL_VERSION = "2024-11-05";
 const SERVER_INFO = { name: "mind-membrane", version: "0.1.0" } as const;
 
 interface JsonRpcRequest {
